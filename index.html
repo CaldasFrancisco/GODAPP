@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -393,7 +354,6 @@
     <a href="#mood"><span class="emoji">😊</span>Humor</a>
     <a href="#water"><span class="emoji">💧</span>Água</a>
     <a href="#todo"><span class="emoji">✅</span>To-Do</a>
-    <a href="#calendar"><span class="emoji">📅</span>Agenda</a>
     <a href="#gratitude"><span class="emoji">🙏</span>Gratidão</a>
     <a href="#sleep"><span class="emoji">🌙</span>Dormir</a>
     <a href="#wake"><span class="emoji">⏰</span>Acordar</a>
@@ -526,14 +486,6 @@
       <div class="obstacles">
         <textarea id="todo-obstacles" placeholder="O QUE ME ATRAPALHOU?"></textarea>
         <button onclick="sendObstacles('todo-obstacles')">ENVIAR</button>
-      </div>
-    </div>
-
-    <div class="section" id="calendar">
-      <h2>📅 INTEGRAÇÃO GOOGLE AGENDA</h2>
-      <p>Envie suas tarefas diretamente para o Google Agenda.</p>
-      <div class="todo-buttons">
-        <button class="todo-button" id="send-to-calendar" title="Enviar Todas para Agenda">📅</button>
       </div>
     </div>
 
@@ -1066,7 +1018,6 @@
       const addTodoButton = document.getElementById('add-todo');
       const sendTodoButton = document.getElementById('send-todo');
       const deleteTodoButton = document.getElementById('delete-todo');
-      const sendToCalendarButton = document.getElementById('send-to-calendar');
       let todoCount = parseInt(localStorage.getItem('todoCount')) || 0;
 
       function addTodoTask(index, text = '', date = '', time = '', destination = 'calendar', checked = false) {
@@ -1146,7 +1097,14 @@
         const time = document.getElementById(`todo-time${index}`)?.value;
         const destination = document.getElementById(`todo-destination${index}`)?.value;
 
-        if (destination !== 'calendar' && text) {
+        if (destination === 'calendar' && text && date && time) {
+          const startDateTime = new Date(`${date}T${time}`);
+          const endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
+          const formatDate = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+          const calendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(text)}&dates=${formatDate(startDateTime)}/${formatDate(endDateTime)}`;
+          window.open(calendarUrl, '_blank');
+          deleteTodoTask(index);
+        } else if (['payments', 'wife', 'project', 'pending', 'personal'].includes(destination) && text) {
           const section = destination;
           const list = document.getElementById(`${section}-list`);
           let taskCount = parseInt(localStorage.getItem(`${section}Count`) || 0) + 1;
@@ -1194,32 +1152,6 @@
         updateTodoProgress();
       }
 
-      function sendToCalendar() {
-        const tasksToProcess = [];
-        for (let i = 1; i <= todoCount; i++) {
-          if (document.getElementById(`todo-task${i}`)) {
-            const destination = document.getElementById(`todo-destination${i}`)?.value;
-            if (destination === 'calendar') tasksToProcess.push(i);
-          }
-        }
-        tasksToProcess.forEach(index => {
-          const text = document.getElementById(`todo-text${index}`)?.value;
-          const date = document.getElementById(`todo-date${index}`)?.value;
-          const time = document.getElementById(`todo-time${index}`)?.value;
-          if (text && date && time) {
-            const startDateTime = new Date(`${date}T${time}`);
-            const endDateTime = new Date(startDateTime.getTime() + 30 * 60 * 1000);
-            const formatDate = (d) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-            const calendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(text)}&dates=${formatDate(startDateTime)}/${formatDate(endDateTime)}`;
-            window.open(calendarUrl, '_blank');
-            deleteTodoTask(index);
-          }
-        });
-        todoCount = Math.max(0, todoCount - tasksToProcess.length);
-        localStorage.setItem('todoCount', todoCount);
-        updateTodoProgress();
-      }
-
       function updateTodoProgress() {
         if (!todoList) return;
         const checkboxes = todoList.querySelectorAll('input[type="checkbox"]');
@@ -1249,7 +1181,6 @@
 
       if (sendTodoButton) sendTodoButton.addEventListener('click', sendAllTasks);
       if (deleteTodoButton) deleteTodoButton.addEventListener('click', deleteAllTodoTasks);
-      if (sendToCalendarButton) sendToCalendarButton.addEventListener('click', sendToCalendar);
 
       document.querySelectorAll('.gratitude input[type="text"]').forEach((input, index) => {
         input.addEventListener('input', () => {
